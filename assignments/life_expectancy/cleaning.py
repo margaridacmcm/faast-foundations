@@ -5,40 +5,46 @@ import argparse
 import pandas as pd
 from life_expectancy import DATA_DIR
 
-def clean_data(region: str = "PT"):
-    """Clean the EU life expectancy data and filter for Portugal."""
-    input_file: Path = DATA_DIR / "eu_life_expectancy_raw.tsv"
-    output_file: Path = DATA_DIR / "pt_life_expectancy.csv"
+def load_data(raw_filename: str) -> pd.DataFrame:
+    """Load raw data from a TSV file into a pandas DataFrame."""
+    df = pd.read_csv(DATA_DIR / raw_filename, sep="\t")
+    return df
 
-    # Load
-    raw_df = pd.read_csv(input_file, sep="\t")
-    raw_df.columns = raw_df.columns.str.strip()
-    df = raw_df.copy()
+def clean_data(raw_data: pd.DataFrame, region: str = "PT") -> pd.DataFrame:
+    """Clean raw life expectancy data for a specific region."""
+    raw_data.columns = raw_data.columns.str.strip()
+    data = raw_data.copy()
 
-    # Clean
-    id_col = df.columns[0]
-    df[["unit", "sex", "age", "region"]] = df[id_col].str.split(",", expand=True)
-    df = df.drop(columns=id_col)
-    df = df.melt(
+    id_col = data.columns[0]
+    data[["unit", "sex", "age", "region"]] = data[id_col].str.split(",", expand=True)
+    data = data.drop(columns=id_col)
+    data = data.melt(
         id_vars=["unit", "sex", "age", "region"],
         var_name="year",
         value_name="value",
     )
 
-    df["year"] = df["year"].astype(str).str.strip().astype(int)
+    data["year"] = data["year"].astype(str).str.strip().astype(int)
 
-    df["value"] = pd.to_numeric(
-        df["value"].astype(str).str.extract(r"(\d+\.?\d*)")[0],
+    data["value"] = pd.to_numeric(
+        data["value"].astype(str).str.extract(r"(\d+\.?\d*)")[0],
         errors="coerce",
     )
-    df = df.dropna(subset=["value"])
+    data = data.dropna(subset=["value"])
 
-    #Filter
-    df = df[df["region"] == region]
+    data = data[data["region"] == region]
+    return data
 
-    #Save
+def save_data(df: pd.DataFrame, output_filename: str):
+    """Save the cleaned data to a CSV file."""
+    output_file: Path = DATA_DIR / output_filename
     df.to_csv(output_file, index=False)
-    return df
+
+def main(region: str = "PT"):
+    """Main function to load, clean, and save life expectancy data for a specific region."""
+    raw_df = load_data("eu_life_expectancy_raw.tsv")
+    clean_df = clean_data(raw_df, region=region)
+    save_data(clean_df, "pt_life_expectancy.csv")
 
 if __name__ == "__main__":  # pragma: no cover
     parser = argparse.ArgumentParser(description="Clean EU life expectancy data.")
@@ -48,4 +54,4 @@ if __name__ == "__main__":  # pragma: no cover
         help="Country code to filter on (default: PT)",
     )
     args = parser.parse_args()
-    clean_data(region=args.region)
+    main(args.region)
